@@ -1,0 +1,118 @@
+
+---
+
+AWSTemplateFormatVersion: 2010-09-09
+
+#
+# Parameters
+#
+Parameters:
+  ArtifactStoreS3Location:
+    Type: String
+  
+  CodeBuildRoleArn:
+    Type: String
+
+  LambdaFunctionBucket:
+    Type: String
+
+  LambdaFunctionZip:
+    Type: String
+
+  LambdaFunctionRoleArn:
+    Type: String
+
+  CodePipelineRoleArn:
+    Type: String
+  
+
+Resources:
+  Source:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: sample-repository
+  
+  Build:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name: sample-build
+      Source:
+        Type: CODECOMMIT
+        Location: !GetAtt Source.CloneUrlHttp
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: lulichn/sbt:0.13.15
+        Type: LINUX_CONTAINER
+      ServiceRole: !Ref CodeBuildRoleArn
+      TimeoutInMinutes: 60
+
+  PostBuild:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sample-post-build
+      Code:
+        S3Bucket: !Ref LambdaFunctionBucket
+        S3Key: !Ref LambdaFunctionZip
+      Handler: index.handler
+      Environment:
+        Variables:
+          APP_ID: FIXME
+          LAYER_ID: FIXME
+          STACK_ID: FIXME
+      Role: !Ref LambdaFunctionRoleArn
+      Runtime: nodejs6.10
+      MemorySize: 256
+      Timeout: 60
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: sample-codepipeline
+      RoleArn: !Ref CodePipelineRoleArn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: CodeCommit
+              Configuration:
+                RepositoryName: !GetAtt Source.Name
+                BranchName: master
+              OutputArtifacts:
+                - Name: MyApp
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: Build
+              InputArtifacts:
+                - Name: MyApp
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref Build
+              OutputArtifacts:
+                - Name: MyAppBuild
+              RunOrder: 1
+        - Name: PostBuild
+          Actions:
+            - Name: PostBuild
+              InputArtifacts:
+                - Name: MyAppBuild
+              ActionTypeId:
+                Category: Invoke
+                Owner: AWS
+                Version: 1
+                Provider: Lambda
+              Configuration:
+                FunctionName: !Ref PostBuild
+      ArtifactStore: 
+        Type: S3
+        Location: !Ref ArtifactStoreS3Location

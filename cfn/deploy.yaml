@@ -1,0 +1,64 @@
+
+---
+
+AWSTemplateFormatVersion: 2010-09-09
+
+#
+# Parameters
+#
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
+
+  DefaultSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Default Subnet ID
+
+  ServiceRoleArn:
+    Type: String
+  
+  InstanceProfileArn:
+    Type: String
+  
+  CustomRecipeLocation:
+    Type: String
+
+Resources:
+  Stack:
+    Type: AWS::OpsWorks::Stack
+    Properties:
+      Name: sample-stack
+      VpcId: !Ref VpcId
+      DefaultSubnetId: !Ref DefaultSubnetId
+      DefaultOs: Amazon Linux 2017.03
+      ConfigurationManager:
+        Name: Chef
+        Version: "12"
+      UseCustomCookbooks: true
+      CustomCookbooksSource:
+        Type: s3
+        Url: !Ref CustomRecipeLocation
+      ServiceRoleArn: !Ref ServiceRoleArn
+      DefaultInstanceProfileArn: !Ref InstanceProfileArn
+
+  AppLayer:
+    Type: AWS::OpsWorks::Layer
+    Properties:
+      Name: sample-app-server-layer
+      Shortname: app-server
+      Type: custom
+      EnableAutoHealing: true
+      CustomRecipes:
+        Deploy:
+          - play_demo
+      AutoAssignPublicIps: true
+      AutoAssignElasticIps: false
+      StackId: !Ref Stack
+  
+  PlayApp:
+    Type: AWS::OpsWorks::App
+    Properties:
+      Name: sample-play
+      StackId: !Ref Stack
+      Type: other
